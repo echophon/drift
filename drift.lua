@@ -10,7 +10,7 @@ engine.name = 'PolyPerc'
 local viewport   = { width = 128, height = 64 }
 local frame = 0
 
-local drift_amount = 2
+local drift_amount = 1
 local connect_distance = 24
 local dot_count = 8
 local dots  = {{x=0,y=0,move_x=0,move_y=0,dirty={0,0,0,0,0,0,0,0}}
