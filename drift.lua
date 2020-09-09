@@ -1,8 +1,11 @@
 -- drift - dust motes in flight
 -- 
--- v0.0.1 @echophon
+-- v0.0.2 @echophon
 --
 -- KEY2 randomizes
+-- KEY3 cycles focus
+-- ENC2 motivate x-axis
+-- ENC3 motivate y-axis
 
 
 engine.name = 'PolyPerc'
@@ -10,8 +13,10 @@ engine.name = 'PolyPerc'
 local viewport   = { width = 128, height = 64 }
 local frame = 0
 
-local drift_amount = 1
+local txt = 'hello'
+local drift_amount = 4
 local connect_distance = 24
+local focus = 1
 local dot_count = 8
 local dots  = {{x=0,y=0,move_x=0,move_y=0,dirty={0,0,0,0,0,0,0,0}}
             ,{x=0,y=0,move_x=0,move_y=0,dirty={0,0,0,0,0,0,0,0}}
@@ -29,26 +34,50 @@ end
 
 function key(id,state)
     if id == 2 and state == 1 then
-      randomize_dots()
+        randomize_dots()
+        -- stop_dots()
+    elseif id == 3 and state == 1 then
+        focus = 1+(focus%dot_count)
     end
+end
+
+function enc(id,delta)
+    if id == 2 then
+      dots[focus].move_x = tonumber(string.format("%.2f", util.clamp(dots[focus].move_x + (delta*0.01),-drift_amount,drift_amount)))
+    elseif id == 3 then
+      dots[focus].move_y = tonumber(string.format("%.2f", util.clamp(dots[focus].move_y + (delta*0.01),-drift_amount,drift_amount)))
+    end
+    txt = dots[focus].move_x .. "," .. dots[focus].move_y
 end
 
 function randomize_dots()
     for i=1,dot_count do
         dots[i].x = math.random(viewport.width)
         dots[i].y = math.random(viewport.height)
-        dots[i].move_x = (1.0 - math.random()) * drift_amount
-        dots[i].move_y = (1.0 - math.random()) * drift_amount
+        -- dots[i].move_x = (0.5 - math.random()) * drift_amount
+        dots[i].move_x = 0
+        dots[i].move_y = (1 - (math.random(100)* 0.01) ) * drift_amount
+    end
+end
+
+function stop_dots()
+    for i=1,dot_count do
+        -- dots[i].x = viewport.width/2
+        -- dots[i].y = viewport.height/2
+        dots[i].move_x = 0
+        dots[i].move_y = 0
     end
 end
 
 
 
-
-
 function draw_dots()
     for i=1, dot_count do
-        draw_circle(dots[i].x, dots[i].y,1,13)
+        if i == focus then
+            draw_circle(dots[i].x, dots[i].y,2,13)
+        else
+            draw_circle(dots[i].x, dots[i].y,1,5)
+        end
     end
 end
 
@@ -74,6 +103,13 @@ function draw_line(x1, y1, x2, y2, l)
     screen.line(x2,y2)
     screen.stroke()
 end
+
+function draw_text()
+    screen.level(1)
+    screen.move(2,6)
+    screen.text(txt)
+    screen.stroke()
+  end
 
 function move_dots()
     for i=1, dot_count do
@@ -117,6 +153,7 @@ function redraw()
     screen.clear()
     draw_dots()
     draw_connections()
+    draw_text()
     play()
     screen.update()
 end
