@@ -1,9 +1,10 @@
 -- drift - dust motes in flight
 -- 
--- v0.0.2 @echophon
+-- v0.1.0 @echophon
 --
 -- KEY2 randomizes
 -- KEY3 cycles focus
+-- ENC1 transpose
 -- ENC2 motivate x-axis
 -- ENC3 motivate y-axis
 
@@ -27,6 +28,21 @@ local dots  = {{x=0,y=0,move_x=0,move_y=0,dirty={0,0,0,0,0,0,0,0}}
             ,{x=0,y=0,move_x=0,move_y=0,dirty={0,0,0,0,0,0,0,0}}
             ,{x=0,y=0,move_x=0,move_y=0,dirty={0,0,0,0,0,0,0,0}}}
 
+local useMidi    = 0
+local channel    = 1
+local m          = midi.connect()
+
+params:add_number("useMidi","useMidi",0,1,0)
+params:set_action("useMidi", function(x) useMidi = x end)
+
+params:add_number("channel","channel",1,16,1)
+params:set_action("channel", function(x) channel = x end)
+
+params:add_number("drift_amount","drift_amount",1,20,12)
+params:set_action("drift_amount", function(x) drift_amount = x end)
+
+params:add_number("connect_distance","connect_distance",4,48,24)
+params:set_action("connect_distance", function(x) connect_distance = x end)
 
 function init() 
     randomize_dots()
@@ -46,6 +62,10 @@ function enc(id,delta)
       dots[focus].move_x = tonumber(string.format("%.2f", util.clamp(dots[focus].move_x + (delta*0.01),-drift_amount,drift_amount)))
     elseif id == 3 then
       dots[focus].move_y = tonumber(string.format("%.2f", util.clamp(dots[focus].move_y + (delta*0.01),-drift_amount,drift_amount)))
+    elseif id == 1 then
+      for i=1,dot_count do
+        dots[i].x = tonumber(string.format("%.0f", util.clamp(dots[i].x + (delta*1),-1,viewport.width)))
+      end
     end
     txt = dots[focus].move_x .. "," .. dots[focus].move_y
 end
@@ -148,13 +168,28 @@ function play()
     end            
 end
 
+function play_midi()
+    for i=1, dot_count do
+        for j=1, dot_count do
+            if distance(dots[i].x, dots[i].y, dots[j].x, dots[j].y) < connect_distance and dots[j].dirty[i] == 0 then
+                dots[j].note = math.floor(dots[j].x)
+                m:note_on(dots[j].note,math.floor(dots[j].y),channel)
+                dots[j].dirty[i]=1
+            end
+            if distance(dots[i].x, dots[i].y, dots[j].x, dots[j].y) > connect_distance and dots[j].dirty[i] == 1 then
+                m:note_off(dots[j].note,0,channel)
+                dots[j].dirty[i]=0
+            end       
+        end
+    end            
+end
+
 
 function redraw()
     screen.clear()
     draw_dots()
     draw_connections()
     draw_text()
-    play()
     screen.update()
 end
 
@@ -163,6 +198,11 @@ re.time = 0.1
 re.event = function()
     frame = frame + 1
     move_dots()
+    if useMidi == 1 then
+        play_midi()
+    else
+        play()
+    end
 
     redraw()
 end

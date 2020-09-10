@@ -7,6 +7,8 @@ KEY2 randomizes
 
 KEY3 cycles focus
 
+ENC1 transpose
+
 ENC2 motivate x-axis
 
 ENC3 motivate y-axis
