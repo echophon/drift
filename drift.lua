@@ -1,12 +1,15 @@
 -- drift - dust motes in flight
 -- 
--- v0.1.0 @echophon
+-- v0.3.0 @echophon
 --
--- KEY2 randomizes
+-- KEY1 shift
+-- KEY2 cycles param focus
 -- KEY3 cycles focus
 -- ENC1 transpose
 -- ENC2 motivate x-axis
 -- ENC3 motivate y-axis
+-- shift + KEY2 randomizes all
+-- shift + KEY3 randomizes focus
 
 
 engine.name = 'PolyPerc'
@@ -15,11 +18,22 @@ local viewport   = { width = 128, height = 64 }
 local frame = 0
 
 local txt = 'hello'
-local drift_amount = 4
+local drift_max = 40
 local connect_distance = 24
 local focus = 1
+local param_focus = 1
+local param_count = 5
+local param_txt = {"move", "pos", "connect distance", "boundary", "random"}
+local shift = false
 local dot_count = 8
-local dots  = {{x=0,y=0,move_x=0,move_y=0,dirty={0,0,0,0,0,0,0,0}}
+local boundary_ops = 1
+local boundary_count = 4
+local boundary_txt = {"wrap", "wrap half", "bounce", "random"}
+local random_ops = 1
+local random_count = 7
+local random_txt = {"default", "xpos", "ypos", "xypos", "xmove", "ymove", "xymove"}
+
+local dots= {{x=0,y=0,move_x=0,move_y=0,dirty={0,0,0,0,0,0,0,0}}
             ,{x=0,y=0,move_x=0,move_y=0,dirty={0,0,0,0,0,0,0,0}}
             ,{x=0,y=0,move_x=0,move_y=0,dirty={0,0,0,0,0,0,0,0}}
             ,{x=0,y=0,move_x=0,move_y=0,dirty={0,0,0,0,0,0,0,0}}
@@ -38,103 +52,139 @@ params:set_action("useMidi", function(x) useMidi = x end)
 params:add_number("channel","channel",1,16,1)
 params:set_action("channel", function(x) channel = x end)
 
-params:add_number("drift_amount","drift_amount",1,20,12)
-params:set_action("drift_amount", function(x) drift_amount = x end)
+params:add_number("drift_max","drift_max",1,40,12)
+params:set_action("drift_max", function(x) drift_max = x end)
 
 params:add_number("connect_distance","connect_distance",4,48,24)
 params:set_action("connect_distance", function(x) connect_distance = x end)
+
+params:add_option("boundary_ops","boundary_ops",{"wrap", "wrap half", "bounce", "random"},1)
+params:set_action("boundary_ops", function(x) boundary_ops = x end)
+
+params:add_option("random_ops","random_ops",{"default", "xpos", "ypos", "xypos", "xmove", "ymove", "xymove"},1)
+params:set_action("random_ops", function(x) random_ops = x end)
+
+params:add_trigger("randomize", "randomize")
+params:set_action("randomize", function(x) randomize_dots() end)
+
+params:add_trigger("reset", "reset")
+params:set_action("reset", function(x) reset() end)
 
 function init() 
     randomize_dots()
 end
 
 function key(id,state)
-    if id == 2 and state == 1 then
+    if id == 1 then
+        shift = not shift
+    elseif id == 2 and state == 1 and shift == true then
         randomize_dots()
-        -- stop_dots()
+    elseif id == 3 and state == 1 and shift == true then
+        randomize_dot()
     elseif id == 3 and state == 1 then
         focus = 1+(focus%dot_count)
+    elseif id == 2 and state == 1 then
+        param_focus = 1+(param_focus%param_count)
     end
 end
 
 function enc(id,delta)
-    if id == 2 then
-      dots[focus].move_x = tonumber(string.format("%.2f", util.clamp(dots[focus].move_x + (delta*0.01),-drift_amount,drift_amount)))
-    elseif id == 3 then
-      dots[focus].move_y = tonumber(string.format("%.2f", util.clamp(dots[focus].move_y + (delta*0.01),-drift_amount,drift_amount)))
+    if id == 2 and param_focus == 1 then
+      dots[focus].move_x = tonumber(string.format("%.2f", util.clamp(dots[focus].move_x + (delta*0.01),-drift_max,drift_max)))
+    elseif id == 3 and param_focus == 1 then
+      dots[focus].move_y = tonumber(string.format("%.2f", util.clamp(dots[focus].move_y + (delta*0.01),-drift_max,drift_max)))
+    elseif id == 2 and param_focus == 2 then
+      dots[focus].x = tonumber(string.format("%.1f", util.clamp(dots[focus].x + (delta*0.1),0,viewport.width)))
+    elseif id == 3 and param_focus == 2 then
+        dots[focus].y = tonumber(string.format("%.1f", util.clamp(dots[focus].y + (delta*0.1),0,viewport.height)))
+    elseif id == 2 and param_focus == 3 then
+        connect_distance = tonumber(string.format("%.1f", util.clamp(connect_distance + (delta*0.1),1,48)))
+    elseif id == 2 and param_focus == 4 then
+        boundary_ops = util.clamp(boundary_ops + (delta*1),1,4)
+    elseif id == 2 and param_focus == 5 then
+        random_ops = util.clamp(random_ops + (delta*1),1,7)
+
     elseif id == 1 then
       for i=1,dot_count do
-        dots[i].x = tonumber(string.format("%.0f", util.clamp(dots[i].x + (delta*1),-1,viewport.width)))
+        -- dots[i].x = tonumber(string.format("%.0f", util.clamp(dots[i].x + (delta*1),-1,viewport.width)))
+        dots[i].x = tonumber(string.format("%.0f", util.clamp(dots[i].x + (delta*1),-20,viewport.width)))
       end
     end
-    txt = dots[focus].move_x .. "," .. dots[focus].move_y
+end
+
+function drift_calc()
+    return (0.5 - (math.random(100)* 0.01) ) * drift_max
+end
+
+function reset()
+    for i=1,dot_count do
+        dots[i].move_x = 0
+        dots[i].move_y = 0
+        dots[i].y = viewport.height/2
+        dots[i].x = ((viewport.width/8)*i)-8
+    end
+end
+
+function randomize_dot()
+    if random_ops == 1 then
+        dots[focus].x = math.random(viewport.width)
+        dots[focus].y = math.random(viewport.height)
+        dots[focus].move_x = 0
+        dots[focus].move_y = drift_calc()
+    elseif random_ops == 2 then
+        dots[focus].x = math.random(viewport.width)
+    elseif random_ops == 3 then
+        dots[focus].y = math.random(viewport.height)
+    elseif random_ops == 4 then
+        dots[focus].x = math.random(viewport.width)
+        dots[focus].y = math.random(viewport.height)
+    elseif random_ops == 5 then
+        dots[focus].move_x = drift_calc()
+    elseif random_ops == 6 then
+        dots[focus].move_y = drift_calc()
+    elseif random_ops == 7 then
+        dots[focus].move_x = drift_calc()
+        dots[focus].move_y = drift_calc()
+    end
 end
 
 function randomize_dots()
     for i=1,dot_count do
-        dots[i].x = math.random(viewport.width)
-        dots[i].y = math.random(viewport.height)
-        -- dots[i].move_x = (0.5 - math.random()) * drift_amount
-        dots[i].move_x = 0
-        dots[i].move_y = (1 - (math.random(100)* 0.01) ) * drift_amount
-    end
-end
-
-function stop_dots()
-    for i=1,dot_count do
-        -- dots[i].x = viewport.width/2
-        -- dots[i].y = viewport.height/2
-        dots[i].move_x = 0
-        dots[i].move_y = 0
-    end
-end
-
-
-
-function draw_dots()
-    for i=1, dot_count do
-        if i == focus then
-            draw_circle(dots[i].x, dots[i].y,2,13)
-        else
-            draw_circle(dots[i].x, dots[i].y,1,5)
+        if random_ops == 1 then
+            dots[i].x = math.random(viewport.width)
+            dots[i].y = math.random(viewport.height)
+            dots[i].move_x = 0
+            dots[i].move_y = drift_calc()
+        elseif random_ops == 2 then
+            dots[i].x = math.random(viewport.width)
+        elseif random_ops == 3 then
+            dots[i].y = math.random(viewport.height)
+        elseif random_ops == 4 then
+            dots[i].x = math.random(viewport.width)
+            dots[i].y = math.random(viewport.height)
+        elseif random_ops == 5 then
+            dots[i].move_x = drift_calc()
+        elseif random_ops == 6 then
+            dots[i].move_y = drift_calc()
+        elseif random_ops == 7 then
+            dots[i].move_x = drift_calc()
+            dots[i].move_y = drift_calc()
         end
     end
 end
-
-function draw_connections()
-    for i=1, dot_count do
-        for j=1, dot_count do
-            if distance(dots[i].x, dots[i].y, dots[j].x, dots[j].y) < connect_distance then
-                draw_line(dots[i].x, dots[i].y, dots[j].x, dots[j].y, 13)
-            end     
-        end
-    end            
-end
-
-function draw_circle(x, y, r, l)
-    screen.level(l)
-    screen.circle(x,y,r)
-    screen.stroke()
-end
-
-function draw_line(x1, y1, x2, y2, l)
-    screen.level(l)
-    screen.move(x1,y1)
-    screen.line(x2,y2)
-    screen.stroke()
-end
-
-function draw_text()
-    screen.level(1)
-    screen.move(2,6)
-    screen.text(txt)
-    screen.stroke()
-  end
 
 function move_dots()
     for i=1, dot_count do
-        dots[i].x = (dots[i].x + dots[i].move_x) % viewport.width
-        dots[i].y = (dots[i].y + dots[i].move_y) % viewport.height
+        dots[i].x = (dots[i].x + dots[i].move_x) 
+        dots[i].y = (dots[i].y + dots[i].move_y) 
+    end
+end
+
+
+function move_dots_wrap()
+    for i=1, dot_count do
+        dots[i].x = dots[i].x % viewport.width
+        dots[i].y = dots[i].y % viewport.height
         if dots[i].x < 0 then
             dots[i].x = viewport.width
         end
@@ -143,6 +193,56 @@ function move_dots()
         end
     end
 end
+
+function move_dots_wrap_perc(n,m)
+    for i=1, dot_count do
+        if dots[i].x > viewport.width then 
+            dots[i].x = ((viewport.width*n) + dots[i].move_x)
+        end
+        if dots[i].y > viewport.height then 
+            dots[i].y = ((viewport.height*m) + dots[i].move_y)
+        end
+        if dots[i].x < 0 then
+            dots[i].x = ((viewport.width*n) + dots[i].move_x)
+        end
+        if dots[i].y < 0 then
+            dots[i].y = ((viewport.height*m) + dots[i].move_y)
+        end
+    end
+end
+
+function move_dots_bounce()
+    for i=1, dot_count do
+        if dots[i].x < 0  then
+            dots[i].x = -dots[i].x
+            dots[i].move_x = -dots[i].move_x
+        end
+        if dots[i].x > viewport.width then
+            dots[i].x = viewport.width + (viewport.width - dots[i].x)
+            dots[i].move_x = -dots[i].move_x
+        end
+        if dots[i].y < 0  then
+            dots[i].y = -dots[i].y
+            dots[i].move_y = -dots[i].move_y
+        end
+        if dots[i].y > viewport.height then
+            dots[i].y = viewport.height + (viewport.height - dots[i].y)
+            dots[i].move_y = -dots[i].move_y
+        end
+    end
+end
+
+function move_dots_random()
+    for i=1, dot_count do
+        if dots[i].x < 0 or dots[i].x > viewport.width then
+            dots[i].x = math.random(0,viewport.width)
+        end
+        if dots[i].y < 0 or dots[i].y > viewport.height then
+            dots[i].y = math.random(0,viewport.height)
+        end
+    end
+end
+
 
 function distance( x1, y1, x2, y2 )
 	return math.sqrt( (x2-x1)^2 + (y2-y1)^2 )
@@ -184,6 +284,56 @@ function play_midi()
     end            
 end
 
+function draw_dots()
+    for i=1, dot_count do
+        if i == focus then
+            draw_circle(dots[i].x, dots[i].y,2,13)
+        else
+            draw_circle(dots[i].x, dots[i].y,1,5)
+        end
+    end
+end
+
+function draw_connections()
+    for i=1, dot_count do
+        for j=1, dot_count do
+            if distance(dots[i].x, dots[i].y, dots[j].x, dots[j].y) < connect_distance then
+                draw_line(dots[i].x, dots[i].y, dots[j].x, dots[j].y, 13)
+            end     
+        end
+    end            
+end
+
+function draw_circle(x, y, r, l)
+    screen.level(l)
+    screen.circle(x,y,r)
+    screen.stroke()
+end
+
+function draw_line(x1, y1, x2, y2, l)
+    screen.level(l)
+    screen.move(x1,y1)
+    screen.line(x2,y2)
+    screen.stroke()
+end
+
+function draw_text()
+    if param_focus == 1 then
+        txt = param_txt[param_focus] .. focus .. ":" .. string.format("%.2f",dots[focus].move_x) .. "," .. string.format("%.2f",dots[focus].move_y)
+    elseif param_focus == 2 then
+        txt = param_txt[param_focus] .. focus .. ":" .. string.format("%.2f",dots[focus].x) .. "," .. string.format("%.2f",dots[focus].y)
+    elseif param_focus == 3 then
+        txt = param_txt[param_focus] ..  ":" .. string.format("%.1f",connect_distance) 
+    elseif param_focus == 4 then
+        txt = param_txt[param_focus] ..  ":" .. boundary_txt[boundary_ops] 
+    elseif param_focus == 5 then
+        txt = param_txt[param_focus] ..  ":" .. random_txt[random_ops] 
+    end
+    screen.level(1)
+    screen.move(2,6)
+    screen.text(txt)
+    screen.stroke()
+end
 
 function redraw()
     screen.clear()
@@ -198,6 +348,16 @@ re.time = 0.1
 re.event = function()
     frame = frame + 1
     move_dots()
+    if boundary_ops == 1 then
+        move_dots_wrap()
+    elseif boundary_ops == 2 then
+        move_dots_wrap_perc(0.5,0.5)
+    elseif boundary_ops == 3 then
+        move_dots_bounce()
+    elseif boundary_ops == 4 then
+        move_dots_random()
+    end
+
     if useMidi == 1 then
         play_midi()
     else
